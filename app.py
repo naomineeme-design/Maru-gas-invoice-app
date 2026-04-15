@@ -1,11 +1,15 @@
 import streamlit as st
 import openpyxl
-import io
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+import datetime
 
 st.set_page_config(page_title="請求書アプリ", layout="centered")
 
-# ====================== パスワード ======================
-PASSWORD = "komuro2026"   # ← 変更推奨
+# パスワード
+PASSWORD = "komuro2026"
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -21,11 +25,10 @@ if not st.session_state.authenticated:
             st.error("パスワードが違います")
     st.stop()
 
-# ====================== 本体 ======================
 st.title("🛢️ ガソリン請求書作成アプリ")
-st.caption("iPad対応・PDF推奨版")
+st.caption("iPad対応・PDF直接出力版")
 
-st.subheader("① 金額を手入力")
+st.subheader("① 金額入力")
 col1, col2 = st.columns(2)
 with col1:
     tax10 = st.number_input("10%対象税抜金額", value=99334, step=1000)
@@ -42,47 +45,39 @@ with col_b:
     code = st.text_input("お客様コード", "07359-333200-057")
     work = st.text_input("工事名称", "大熊減容化作業所")
 
-if st.button("📄 Excelを作成する", type="primary", use_container_width=True):
-    try:
-        wb = openpyxl.load_workbook("template.xlsx")
-        ws = wb["入力シート・貴社控"]
+if st.button("📄 PDFを作成してダウンロード", type="primary", use_container_width=True):
+    # PDFをメモリ上で作成
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
 
-        # データ書き込み
-        ws['F5'] = year
-        ws['K5'] = month
-        ws['N5'] = day
-        ws['H8'] = work
-        ws['B18'] = "別紙明細の通り"
-        ws['O18'] = 10
-        ws['Q18'] = "式"
-        ws['AI18'] = 1
-        ws['AM18'] = tax10
+    # シンプルな請求書レイアウト
+    c.setFont("Helvetica", 16)
+    c.drawString(20*mm, height - 30*mm, "請　求　書")
 
-        ws['B20'] = "別紙明細の通り"
-        ws['Q20'] = "式"
-        ws['AI20'] = 1
-        ws['AM20'] = keiyu
+    c.setFont("Helvetica", 12)
+    c.drawString(20*mm, height - 50*mm, f"請求日: {year}年 {month}月 {day}日")
+    c.drawString(20*mm, height - 65*mm, f"工事名称: {work}")
+    c.drawString(20*mm, height - 80*mm, f"お客様コード: {code}")
 
-        filename = f"請求書_{year}{month:02d}{day:02d}.xlsx"
-        wb.save(filename)
+    c.setFont("Helvetica", 14)
+    c.drawString(20*mm, height - 110*mm, "別紙明細の通り")
 
-        st.success("✅ Excelファイルを作成しました！")
+    c.setFont("Helvetica", 12)
+    c.drawString(20*mm, height - 140*mm, f"10%対象税抜金額: ¥{tax10:,}")
+    c.drawString(20*mm, height - 160*mm, f"軽油税　　　　　: ¥{keiyu:,}")
+    c.drawString(20*mm, height - 180*mm, f"請求金額（税込）: ¥{int(tax10 * 1.1 + keiyu):,}")
 
-        # Excelダウンロード
-        with open(filename, "rb") as f:
-            st.download_button(
-                label="📥 Excelをダウンロード",
-                data=f,
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+    c.save()
+    buffer.seek(0)
 
-        st.info("ダウンロードしたExcelを開き、iPadのExcelアプリで「ファイル → 印刷 → PDFとして保存」してください。")
+    st.success("✅ PDFを作成しました！")
+    st.download_button(
+        label="📥 PDFをダウンロード",
+        data=buffer,
+        file_name=f"請求書_{year}{month:02d}{day:02d}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
 
-    except FileNotFoundError:
-        st.error("❌ template.xlsx が見つかりません。GitHubにアップロードされていますか？")
-    except Exception as e:
-        st.error(f"エラー: {e}")
-
-st.caption("現在はExcel作成 → iPadでPDF変換する方法を推奨しています。")
+st.info("このPDFは簡易版です。将来的にレイアウトをより請求書らしく改善できます。")
