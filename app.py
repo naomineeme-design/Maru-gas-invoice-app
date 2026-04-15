@@ -7,7 +7,7 @@ import re
 st.set_page_config(page_title="請求書アプリ", layout="centered")
 
 # ====================== パスワード ======================
-PASSWORD = "komuro2026"   # ここは変更してください
+PASSWORD = "komuro2026"   # ← ここは自由に変更してください
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -25,7 +25,7 @@ if not st.session_state.authenticated:
 
 # ====================== 本体 ======================
 st.title("🛢️ ガソリン請求書作成アプリ")
-st.caption("iPad・スマホ対応 改善版")
+st.caption("iPad・スマホ対応 | 手動入力対応版")
 
 @st.cache_resource
 def get_ocr():
@@ -33,15 +33,16 @@ def get_ocr():
 
 reader = get_ocr()
 
-# セッション状態で値を保持
+# 値を保持するためのセッション状態
 if "tax10" not in st.session_state:
     st.session_state.tax10 = 0
 if "keiyu" not in st.session_state:
     st.session_state.keiyu = 0
 
 st.subheader("① 請求書の写真")
-camera = st.camera_input("📸 背面カメラで撮影（画面上部のカメラアイコンで切り替え可能）", key="cam")
-upload = st.file_uploader("📁 写真を選択（おすすめ）", type=["jpg", "jpeg", "png"])
+st.info("📸 iPadの場合：カメラ起動後、画面上部のカメラアイコンをタップすると背面カメラに切り替えられます")
+camera = st.camera_input("カメラで撮影", key="cam")
+upload = st.file_uploader("📁 写真を選択（こちらをおすすめ）", type=["jpg", "jpeg", "png"])
 
 image = None
 if camera:
@@ -52,32 +53,32 @@ elif upload:
 if image:
     st.image(image, use_column_width=True)
 
-    if st.button("🔍 金額を自動読み取り", type="primary", use_container_width=True):
+    if st.button("🔍 OCRで自動読み取り", type="primary", use_container_width=True):
         with st.spinner("OCR処理中..."):
-            text = " ".join(reader.readtext(image, detail=0, width_ths=0.7))
+            text = " ".join(reader.readtext(image, detail=0))
+            tax10_match = re.search(r'10%\s*対象合計[:：]?\s*([0-9,]+)', text) or re.search(r'税率\s*10%\s*対象[:：]?\s*([0-9,]+)', text)
+            keiyu_match = re.search(r'軽油税合計[:：]?\s*([0-9,]+)', text)
 
-            # 読み取り精度を大幅強化
-            tax10_match = re.search(r'10%\s*対象合計[:：]?\s*([0-9,]+)', text) or \
-                         re.search(r'税率\s*10%\s*対象[:：]?\s*([0-9,]+)', text) or \
-                         re.search(r'税抜金額[:：]?\s*([0-9,]+)', text)
-            
-            keiyu_match = re.search(r'軽油税合計[:：]?\s*([0-9,]+)', text) or \
-                         re.search(r'軽油税[:：]?\s*([0-9,]+)', text)
+            st.session_state.tax10 = int(tax10_match.group(1).replace(',', '')) if tax10_match else st.session_state.tax10
+            st.session_state.keiyu = int(keiyu_match.group(1).replace(',', '')) if keiyu_match else st.session_state.keiyu
 
-            st.session_state.tax10 = int(tax10_match.group(1).replace(',', '')) if tax10_match else 0
-            st.session_state.keiyu = int(keiyu_match.group(1).replace(',', '')) if keiyu_match else 0
+        st.success(f"OCR結果 → 10%対象: ¥{st.session_state.tax10:,}円　軽油税: ¥{st.session_state.keiyu:,}円")
 
-            st.success(f"✅ 10%対象: ¥{st.session_state.tax10:,}円　軽油税: ¥{st.session_state.keiyu:,}円")
-
-    # ====================== 入力フォーム ======================
-    st.subheader("② 請求書情報")
-
+    # ====================== 手動入力（常に表示） ======================
+    st.subheader("② 金額を手動で入力・訂正")
     col1, col2 = st.columns(2)
     with col1:
+        st.session_state.tax10 = st.number_input("10%対象税抜金額（必須）", value=st.session_state.tax10, step=1000)
+    with col2:
+        st.session_state.keiyu = st.number_input("軽油税金額（必須）", value=st.session_state.keiyu, step=100)
+
+    st.subheader("③ 請求書情報")
+    col_a, col_b = st.columns(2)
+    with col_a:
         year = st.number_input("西暦", value=2026)
         month = st.number_input("月", value=3, min_value=1, max_value=12)
         day = st.number_input("日", value=15, min_value=1, max_value=31)
-    with col2:
+    with col_b:
         code = st.text_input("お客様コード", "07359-333200-057")
         work = st.text_input("工事名称", "大熊減容化作業所")
 
@@ -106,8 +107,10 @@ if image:
             with open(filename, "rb") as f:
                 st.download_button("📥 Excelをダウンロード", f, filename, use_container_width=True)
             
-            st.success("✅ Excelファイルを作成しました！")
+            st.success("✅ Excelファイルを作成しました！ダウンロードしてください。")
+        except FileNotFoundError:
+            st.error("⚠️ Excelテンプレートが見つかりません。ファイル名が正確か確認してください。")
         except Exception as e:
             st.error(f"エラー: {e}")
 
-st.caption("改善版です。OCR精度がまだ低い場合は写真を明るく・まっすぐに撮ってみてください。")
+st.caption("手動入力で確実に作成できます。OCRは補助的に使ってください。")
