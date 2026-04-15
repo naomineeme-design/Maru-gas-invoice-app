@@ -84,7 +84,7 @@ if image:
 
     if st.button("📄 Excelを作成する", type="primary", use_container_width=True):
         try:
-            wb = openpyxl.load_workbook("2026  実験　丸磯　大熊減溶化作業所　.xlsx")
+            wb = openpyxl.load_workbook("template.xlsx")
             ws = wb["入力シート・貴社控"]
 
             ws['F5'] = year
